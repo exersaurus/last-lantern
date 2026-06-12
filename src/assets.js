@@ -190,6 +190,59 @@ export function createGhoulHound(){
   return { group, mats: [bodyMat, headMat, legMat], eyeMat };
 }
 
+// --------------------------------------------------------- ghoul spitter
+
+let SPITTER_GEO = null;
+function spitterGeo(){
+  if (SPITTER_GEO) return SPITTER_GEO;
+  const body = new THREE.IcosahedronGeometry(0.45, 0);
+  body.scale(0.75, 1.6, 0.7); // slim and tall
+  const head = new THREE.IcosahedronGeometry(0.42, 0);
+  head.scale(1.1, 1.0, 1.1); // bulbous
+  SPITTER_GEO = {
+    body,
+    head,
+    arm: new THREE.BoxGeometry(0.12, 0.7, 0.12),
+    eye: new THREE.SphereGeometry(0.055, 6, 5),
+    sac: new THREE.SphereGeometry(0.12, 6, 5),
+  };
+  return SPITTER_GEO;
+}
+
+export function createGhoulSpitter(){
+  const geo = spitterGeo();
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5f8a52, roughness: 0.95, flatShading: true });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x74a55e, roughness: 0.9, flatShading: true });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x4c6e42, roughness: 1, flatShading: true });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x7dff6a });
+
+  const body = new THREE.Mesh(geo.body, bodyMat);
+  body.position.y = 1.0;
+
+  const head = new THREE.Mesh(geo.head, headMat);
+  head.position.set(0, 1.85, 0.1);
+
+  const eyeL = new THREE.Mesh(geo.eye, eyeMat);
+  eyeL.position.set(-0.13, 1.95, 0.42);
+  const eyeR = new THREE.Mesh(geo.eye, eyeMat);
+  eyeR.position.set(0.13, 1.95, 0.42);
+  // glowing venom sac under the jaw, shares the eye material so it
+  // flashes white with damage ticks too
+  const sac = new THREE.Mesh(geo.sac, eyeMat);
+  sac.position.set(0, 1.62, 0.34);
+
+  const armL = new THREE.Mesh(geo.arm, armMat);
+  armL.position.set(-0.48, 1.15, 0.12);
+  armL.rotation.set(-0.4, 0, 0.25);
+  const armR = new THREE.Mesh(geo.arm, armMat);
+  armR.position.set(0.48, 1.15, 0.12);
+  armR.rotation.set(-0.4, 0, -0.25);
+
+  group.add(body, head, eyeL, eyeR, sac, armL, armR);
+  return { group, mats: [bodyMat, headMat, armMat], eyeMat };
+}
+
 // ----------------------------------------------------------- lightkeeper
 
 export function createLightkeeper(){

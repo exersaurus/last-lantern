@@ -68,9 +68,10 @@ Core balance constants live at the top of these files:
 - `src/lantern.js` — the light weapon: point light (wide) + spotlight
   (focused) + a custom ground-sector shader showing the exact damage zone,
   which pulses on every damage tick.
-- `src/enemies.js` — enemy spawners (ghouls + faster, frailer ghoul hounds
-  on their own spawn track), chase AI with separation, stun/flash on damage
-  ticks, per-type difficulty ramps.
+- `src/enemies.js` — enemy spawners on independent tracks (ghouls; faster,
+  frailer ghoul hounds from 1:00; tanky ranged ghoul spitters from 2:00
+  whose projectiles ignore obstacles), chase AI with separation, stun/flash
+  on damage ticks, per-type difficulty ramps.
 - `src/assets.js` — all procedural low-poly assets: lightkeeper, ghoul,
   pines, rocks, grass tufts, glowing mushrooms.
 - `src/skills.js` — XP curve, skill tree definition, pixel-art skill icons

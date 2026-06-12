@@ -1,18 +1,27 @@
 // Enemy spawning, AI, and the difficulty ramp.
 //
 // Ramp (m = minutes elapsed, fully ramped at 8:00):
-//   GHOUL  — spawn interval 3s -> 0.5s, pack 1 -> 4, max alive 16 -> 90,
-//            HP 18 -> ~35, speed 2.4 -> 4.8, hits for 8
-//   HOUND  — faster but frailer; first one at ~1:00, spawn interval
-//            9s -> 3.5s, pack 1 -> 3, max alive 2 -> 18, HP 12 -> ~23,
-//            speed 4.2 -> 6.0 (still under the player's 6.5), hits for 5
-// Both award the same XP per kill.
+//   GHOUL   — spawn interval 3s -> 0.5s, pack 1 -> 4, max alive 16 -> 90,
+//             HP 18 -> ~35, speed 2.4 -> 4.8, hits for 8
+//   HOUND   — faster but frailer; first one at ~1:00, spawn interval
+//             9s -> 3.5s, pack 1 -> 3, max alive 2 -> 18, HP 12 -> ~23,
+//             speed 4.2 -> 6.0 (still under the player's 6.5), hits for 5
+//   SPITTER — anti-camping artillery; first one at 2:00, hound-like spawn
+//             rate, slow (1.8 -> 3.0) but 2x ghoul HP. Stops at range and
+//             spits glowing projectiles that ignore obstacles. No touch
+//             damage; the shot hits for 7.
+// All award the same XP per kill.
 import * as THREE from 'three';
-import { createGhoul, createGhoulHound } from './assets.js';
+import { createGhoul, createGhoulHound, createGhoulSpitter } from './assets.js';
 import { xpForKill } from './skills.js';
 
 const STUN_TIME = 0.28;
-const HOUND_FIRST_SPAWN = 60; // seconds before the first hound shows up
+const HOUND_FIRST_SPAWN = 60;    // seconds before the first hound shows up
+const SPITTER_FIRST_SPAWN = 120; // seconds before the first spitter
+const SPIT_RANGE = 15;           // fires when the player is this close
+const SPIT_STANDOFF = 11;        // stops advancing at this distance
+const SHOT_SPEED = 7.5;
+const SHOT_MAX_DIST = 38;
 
 export class EnemyManager {
   constructor(scene, world){
@@ -21,6 +30,10 @@ export class EnemyManager {
     this.list = [];
     this.spawnTimer = 2.5;
     this.houndTimer = HOUND_FIRST_SPAWN;
+    this.spitterTimer = SPITTER_FIRST_SPAWN;
+    this.shots = [];
+    this.shotGeo = new THREE.SphereGeometry(0.22, 6, 5);
+    this.shotMat = new THREE.MeshBasicMaterial({ color: 0x86ff5e });
   }
 
   difficulty(elapsed){
@@ -48,16 +61,27 @@ export class EnemyManager {
         atkCd: 0.7,
         bobF: 9, bobA: 0.1, // gallop
       },
+      spitter: {
+        interval: 9 + (3.5 - 9) * t,
+        maxAlive: Math.min(12, Math.floor(1 + m * 1.5)),
+        groupSize: 1 + Math.min(1, Math.floor(m / 4)),
+        hp: 36 * (1 + 0.12 * m), // 2x ghoul
+        speed: Math.min(3.0, 1.8 + 0.1 * m),
+        dmg: 7,        // projectile damage
+        atkCd: 3.0,    // seconds between shots
+        bobF: 2.5, bobA: 0.05, // heavy sway
+      },
     };
   }
 
   update(dt, elapsed, player, onPlayerHit){
     const diff = this.difficulty(elapsed);
 
-    let ghouls = 0, hounds = 0;
+    let ghouls = 0, hounds = 0, spitters = 0;
     for (const g of this.list){
       if (g.dying) continue;
       if (g.type === 'hound') hounds++;
+      else if (g.type === 'spitter') spitters++;
       else ghouls++;
     }
 
@@ -76,6 +100,15 @@ export class EnemyManager {
       const n = 1 + Math.floor(Math.random() * diff.hound.groupSize);
       for (let i = 0; i < n && hounds < diff.hound.maxAlive; i++, hounds++){
         this.spawn('hound', player.pos, diff.hound, diff.xp);
+      }
+    }
+
+    this.spitterTimer -= dt;
+    if (this.spitterTimer <= 0 && spitters < diff.spitter.maxAlive){
+      this.spitterTimer = diff.spitter.interval * (0.75 + Math.random() * 0.5);
+      const n = 1 + Math.floor(Math.random() * diff.spitter.groupSize);
+      for (let i = 0; i < n && spitters < diff.spitter.maxAlive; i++, spitters++){
+        this.spawn('spitter', player.pos, diff.spitter, diff.xp);
       }
     }
 
@@ -125,13 +158,20 @@ export class EnemyManager {
         g.pos.z += g.kb.y * dt;
         g.kb.multiplyScalar(Math.max(0, 1 - 6 * dt));
       } else {
-        const inv = 1 / Math.max(dist, 0.001);
+        // spitters hold position once in firing range; everyone else closes in
+        const advance = g.type !== 'spitter' || dist > SPIT_STANDOFF;
+        const inv = advance ? 1 / Math.max(dist, 0.001) : 0;
         g.pos.x += (dx * inv * g.speed + g.sep.x * 3.0) * dt;
         g.pos.z += (dz * inv * g.speed + g.sep.y * 3.0) * dt;
       }
       this.world.collideCircle(g.pos, g.r);
 
-      if (dist < player.radius + g.r + 0.35 && g.atkCd === 0 && g.stun <= 0){
+      if (g.type === 'spitter'){
+        if (dist < SPIT_RANGE && g.atkCd === 0 && g.stun <= 0){
+          g.atkCd = g.atkCdMax;
+          this.fireShot(g, player);
+        }
+      } else if (dist < player.radius + g.r + 0.35 && g.atkCd === 0 && g.stun <= 0){
         g.atkCd = g.atkCdMax;
         onPlayerHit(g.dmg);
       }
@@ -142,6 +182,53 @@ export class EnemyManager {
       for (const m of g.mats) m.emissive.setRGB(f, f, f * 0.85);
       g.eyeMat.color.setHex(g.flash > 0.01 ? 0xffffff : g.eyeColor);
     }
+
+    this.updateShots(dt, player, onPlayerHit);
+  }
+
+  fireShot(g, player){
+    const dx = player.pos.x - g.pos.x, dz = player.pos.z - g.pos.z;
+    const d = Math.max(0.001, Math.hypot(dx, dz));
+    const mesh = new THREE.Mesh(this.shotGeo, this.shotMat);
+    mesh.position.set(g.pos.x, 1.4, g.pos.z); // leaves the bulbous head
+    this.scene.add(mesh);
+    this.shots.push({
+      pos: new THREE.Vector2(g.pos.x, g.pos.z),
+      dir: new THREE.Vector2(dx / d, dz / d), // straight line, no homing
+      traveled: 0,
+      dmg: g.dmg,
+      mesh,
+    });
+  }
+
+  updateShots(dt, player, onPlayerHit){
+    const t = performance.now() / 1000;
+    for (let i = this.shots.length - 1; i >= 0; i--){
+      const s = this.shots[i];
+      const step = SHOT_SPEED * dt;
+      s.pos.x += s.dir.x * step;
+      s.pos.y += s.dir.y * step;
+      s.traveled += step;
+      // glides over rocks and between trees on purpose — only the player stops it
+      const dx = player.pos.x - s.pos.x, dz = player.pos.z - s.pos.y;
+      if (Math.hypot(dx, dz) < player.radius + 0.35){
+        onPlayerHit(s.dmg);
+        this.removeShot(i);
+        continue;
+      }
+      if (s.traveled > SHOT_MAX_DIST){
+        this.removeShot(i);
+        continue;
+      }
+      const wob = 1 + 0.15 * Math.sin(t * 14 + s.traveled * 2);
+      s.mesh.scale.setScalar(wob);
+      s.mesh.position.set(s.pos.x, 1.0 + 0.1 * Math.sin(t * 9 + s.traveled), s.pos.y);
+    }
+  }
+
+  removeShot(i){
+    this.scene.remove(this.shots[i].mesh); // geometry/material are shared, kept alive
+    this.shots.splice(i, 1);
   }
 
   spawn(type, playerPos, stats, xp){
@@ -152,7 +239,9 @@ export class EnemyManager {
       const z = playerPos.z + Math.sin(ang) * dist;
       if (!this.world.hasRoomAtPoint(x, z)) continue;
       if (this.world.pointBlocked(x, z, 0.8)) continue;
-      const { group, mats, eyeMat } = type === 'hound' ? createGhoulHound() : createGhoul();
+      const { group, mats, eyeMat } =
+        type === 'hound' ? createGhoulHound() :
+        type === 'spitter' ? createGhoulSpitter() : createGhoul();
       group.position.set(x, 0, z);
       this.scene.add(group);
       this.list.push({
@@ -166,7 +255,7 @@ export class EnemyManager {
         atkCdMax: stats.atkCd,
         bobF: stats.bobF,
         bobA: stats.bobA,
-        eyeColor: type === 'hound' ? 0xff9a5e : 0x9fff9b,
+        eyeColor: type === 'hound' ? 0xff9a5e : type === 'spitter' ? 0x7dff6a : 0x9fff9b,
         stun: 0,
         flash: 0,
         atkCd: 0.4,
