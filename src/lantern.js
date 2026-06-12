@@ -18,7 +18,7 @@ export const DPS_WIDE = 2;         // damage per second at 360°
 export const DPS_NARROW = 10;      // damage per second at 45°
 export const TICK_WIDE = 1;      // seconds between damage ticks at 360°
 export const TICK_NARROW = 0.15;   // seconds between damage ticks at 45°
-export const FOCUS_IN_TIME = 1.1;  // seconds to fully narrow while holding click
+export const FOCUS_IN_TIME = 1.7;  // seconds to fully narrow while holding click
 export const FOCUS_OUT_TIME = 0.45;// seconds to relax back to 360°
 export const PULSE_RADIUS = 30;    // Light the World reach (covers the screen)
 
@@ -164,7 +164,7 @@ export class Lantern {
     this.uniforms.uHalfArc.value = this.arcDeg >= 355 ? Math.PI + 0.2 : arcRad / 2;
     this.uniforms.uRange.value = range;
     this.uniforms.uDir.value = Math.atan2(-aimDir.z, aimDir.x);
-    this.uniforms.uIntensity.value = (0.07 + 0.09 * f + 0.1 * this.pulse) * flicker;
+    this.uniforms.uIntensity.value = (0.07 + 0.09 * f + 0.05 * this.pulse) * flicker;
     this.uniforms.uColor.value.copy(WARM).lerp(FOCUS_TINT, focusState ? f : 0);
     this.sector.position.set(playerPos.x, 0.04, playerPos.z);
 

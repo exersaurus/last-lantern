@@ -167,7 +167,7 @@ class Game {
       if (f || r) this.moveVec.addScaledVector(this.fwd, f).addScaledVector(this.right, r).normalize();
     }
     // focusing the beam halves movement speed; Move Speed ranks soften the tax
-    p.speedMult = this.prog.moveSpeedMult * (playing && this.mouseDown ? 0.5 : 1);
+    p.speedMult = this.prog.moveSpeedMult * (playing && this.mouseDown ? 0.35 : 1);
     p.update(dt, this.moveVec, this.aimDir, this.world);
 
     // room streaming: entering a new room spawns its neighbors, prunes the rest
