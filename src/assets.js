@@ -136,6 +136,60 @@ export function createGhoul(){
   return { group, mats: [bodyMat, headMat, clawMat], eyeMat };
 }
 
+// ---------------------------------------------------------- ghoul hound
+
+let HOUND_GEO = null;
+function houndGeo(){
+  if (HOUND_GEO) return HOUND_GEO;
+  const body = new THREE.IcosahedronGeometry(0.5, 0);
+  body.scale(0.8, 0.7, 1.5);
+  HOUND_GEO = {
+    body,
+    head: new THREE.IcosahedronGeometry(0.26, 0),
+    snout: new THREE.BoxGeometry(0.18, 0.15, 0.32),
+    leg: new THREE.BoxGeometry(0.12, 0.5, 0.12),
+    tail: new THREE.BoxGeometry(0.09, 0.09, 0.48),
+    eye: new THREE.SphereGeometry(0.05, 6, 5),
+  };
+  return HOUND_GEO;
+}
+
+export function createGhoulHound(){
+  const geo = houndGeo();
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8a5648, roughness: 0.95, flatShading: true });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x9a6555, roughness: 0.9, flatShading: true });
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x6b4036, roughness: 1, flatShading: true });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff9a5e });
+
+  const body = new THREE.Mesh(geo.body, bodyMat);
+  body.position.y = 0.55;
+
+  const head = new THREE.Mesh(geo.head, headMat);
+  head.position.set(0, 0.72, 0.75);
+  const snout = new THREE.Mesh(geo.snout, headMat);
+  snout.position.set(0, 0.64, 1.0);
+
+  const eyeL = new THREE.Mesh(geo.eye, eyeMat);
+  eyeL.position.set(-0.1, 0.8, 0.9);
+  const eyeR = new THREE.Mesh(geo.eye, eyeMat);
+  eyeR.position.set(0.1, 0.8, 0.9);
+
+  const legs = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]){
+    const leg = new THREE.Mesh(geo.leg, legMat);
+    leg.position.set(sx * 0.25, 0.25, sz * 0.45);
+    legs.push(leg);
+  }
+
+  const tail = new THREE.Mesh(geo.tail, legMat);
+  tail.position.set(0, 0.72, -0.8);
+  tail.rotation.x = -0.55;
+
+  group.add(body, head, snout, eyeL, eyeR, ...legs, tail);
+  return { group, mats: [bodyMat, headMat, legMat], eyeMat };
+}
+
 // ----------------------------------------------------------- lightkeeper
 
 export function createLightkeeper(){

@@ -4,15 +4,19 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { World, ROOM_SIZE } from './world.js';
 import { Player } from './player.js';
-import { Lantern } from './lantern.js';
+import { Lantern, DPS_WIDE, PULSE_RADIUS } from './lantern.js';
 import { EnemyManager } from './enemies.js';
 import { UI, fmtTime } from './ui.js';
+import { Progression, PATHS } from './skills.js';
 
 const VIEW_HALF = 14;                              // ortho half-height in world units
 const CAM_OFFSET = new THREE.Vector3(24, 30, 24);  // isometric camera offset
-const MAX_HP = 100;
+const BASE_HP = 100;
 const FUEL_SECONDS = 600;                          // 10 minute night
+const PULSE_COOLDOWN = 20;
+const FOCUS_STATE_COOLDOWN = 20;
 
+// states: 'menu' (start screen) -> 'playing' <-> 'skills' (paused) -> 'over'
 class Game {
   constructor(){
     this.ui = new UI();
@@ -52,6 +56,17 @@ class Game {
     this.composer.addPass(this.pixelPass);
     this.composer.addPass(new OutputPass());
 
+    // --- progression
+    this.prog = new Progression();
+    this.maxHp = BASE_HP;
+    this.cds = { dash: 0, pulse: 0, focusState: 0 };
+    this.focusActiveT = 0;
+    this.ui.buildSkills(PATHS, (path, skill) => this.invest(path, skill));
+    this.ui.initDock(PATHS);
+    this.ui.onSkillsToggle = () => this.toggleSkills();
+    this.ui.onSkillsClose = () => this.closeSkills();
+    this.ui.setXP(this.prog);
+
     // --- input
     this.keys = new Set();
     this.mouseNdc = new THREE.Vector2();
@@ -63,9 +78,17 @@ class Game {
     this.moveVec = new THREE.Vector3();
 
     addEventListener('keydown', e => {
+      if (e.code === 'Space') e.preventDefault(); // no page scroll / button re-trigger
       this.keys.add(e.code);
       if (e.code === 'BracketLeft') this.setPixelSize(-1);
       if (e.code === 'BracketRight') this.setPixelSize(1);
+      if (e.code === 'KeyC' && (this.state === 'playing' || this.state === 'skills')) this.toggleSkills();
+      if (e.code === 'Escape' && this.state === 'skills') this.closeSkills();
+      if (this.state === 'playing' && !e.repeat){
+        if (e.code === 'Space') this.tryDash();
+        if (e.code === 'KeyE') this.tryPulse();
+        if (e.code === 'KeyR') this.tryFocusState();
+      }
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     addEventListener('mousemove', e => this.mouseNdc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1));
@@ -80,7 +103,7 @@ class Game {
     this.right = new THREE.Vector3(-this.fwd.z, 0, this.fwd.x);
 
     this.state = 'menu';
-    this.hp = MAX_HP;
+    this.hp = BASE_HP;
     this.fuel = FUEL_SECONDS;
     this.kills = 0;
     this.elapsed = 0;
@@ -113,9 +136,11 @@ class Game {
 
   frame(){
     const dt = Math.min(0.05, this.clock.getDelta());
-    this.time += dt;
-    if (this.state !== 'over') this.update(dt);
-    this.composer.render();
+    if (this.state === 'menu' || this.state === 'playing'){
+      this.time += dt;
+      this.update(dt);
+    }
+    this.composer.render(); // 'skills' and 'over' render a frozen frame
   }
 
   update(dt){
@@ -141,6 +166,8 @@ class Game {
               - (this.keys.has('KeyA') || this.keys.has('ArrowLeft') ? 1 : 0);
       if (f || r) this.moveVec.addScaledVector(this.fwd, f).addScaledVector(this.right, r).normalize();
     }
+    // focusing the beam halves movement speed; Move Speed ranks soften the tax
+    p.speedMult = this.prog.moveSpeedMult * (playing && this.mouseDown ? 0.5 : 1);
     p.update(dt, this.moveVec, this.aimDir, this.world);
 
     // room streaming: entering a new room spawns its neighbors, prunes the rest
@@ -150,25 +177,108 @@ class Game {
       this.world.enter(ix, iz);
     }
 
+    // skill timers + lantern modifiers
+    for (const k in this.cds) this.cds[k] = Math.max(0, this.cds[k] - (playing ? dt : 0));
+    if (playing) this.focusActiveT = Math.max(0, this.focusActiveT - dt);
+    const m = this.lantern.mods;
+    m.wideMult = this.prog.wideDamageMult;
+    m.beamMult = this.prog.beamDamageMult;
+    m.radiusBonus = this.prog.radiusBonus;
+    m.focusTimeReduction = this.prog.focusTimeReduction;
+    m.beamBoost = this.focusActiveT > 0 ? 1.5 : 1;
+
     this.lantern.lowFuel = playing && this.fuel < 45;
     const tick = this.lantern.update(dt, p.pos, this.aimDir, playing && this.mouseDown, this.time);
     if (playing && tick){
       const res = this.enemies.applyLightTick(p.pos, this.aimDir, tick);
       this.kills += res.kills;
+      this.gainXp(res.xp);
     }
 
     if (playing){
       this.elapsed += dt;
       this.fuel -= dt;
       this.enemies.update(dt, this.elapsed, p, dmg => this.damagePlayer(dmg));
-      this.ui.setHP(this.hp, MAX_HP);
+      this.ui.setHP(this.hp, this.maxHp);
       this.ui.setFuel(this.fuel, FUEL_SECONDS);
       this.ui.setFocus(this.lantern.arcDeg, this.lantern.focus);
       this.ui.setStats(this.kills, this.elapsed);
+      this.ui.setAbility('abDash', { rank: this.prog.ranks.dash, cd: this.cds.dash, cdMax: this.prog.dashCooldown, active: 0 });
+      this.ui.setAbility('abPulse', { rank: this.prog.ranks.lightTheWorld, cd: this.cds.pulse, cdMax: PULSE_COOLDOWN, active: 0 });
+      this.ui.setAbility('abFocus', { rank: this.prog.ranks.focusState, cd: this.cds.focusState, cdMax: FOCUS_STATE_COOLDOWN, active: this.focusActiveT });
       if (this.hp <= 0) this.gameOver(false);
       else if (this.fuel <= 0) this.gameOver(true);
     }
   }
+
+  // ------------------------------------------------------------ progression
+
+  gainXp(amount){
+    if (!amount) return;
+    const ups = this.prog.addXp(amount);
+    this.ui.setXP(this.prog);
+    if (ups > 0) this.openSkills(true);
+  }
+
+  invest(path, skill){
+    if (!this.prog.invest(path, skill)) return;
+    if (skill.id === 'health'){
+      this.maxHp = BASE_HP + this.prog.maxHpBonus;
+      this.hp = Math.min(this.hp + 10, this.maxHp);
+      this.ui.setHP(this.hp, this.maxHp);
+    }
+    this.ui.refreshSkills(this.prog, PATHS);
+    this.ui.setXP(this.prog);
+  }
+
+  openSkills(leveled = false){
+    if (this.state === 'skills'){
+      this.ui.showSkills(this.prog, PATHS, leveled);
+      return;
+    }
+    if (this.state !== 'playing') return;
+    this.state = 'skills';
+    this.keys.clear();
+    this.mouseDown = false;
+    this.ui.showSkills(this.prog, PATHS, leveled);
+  }
+
+  closeSkills(){
+    if (this.state !== 'skills') return;
+    this.state = 'playing';
+    this.ui.hideSkills();
+  }
+
+  toggleSkills(){
+    if (this.state === 'skills') this.closeSkills();
+    else this.openSkills();
+  }
+
+  // ------------------------------------------------------------ active skills
+
+  tryDash(){
+    if (this.prog.ranks.dash < 1 || this.cds.dash > 0 || this.player.dashing) return;
+    this.player.startDash(this.aimDir);
+    this.cds.dash = this.prog.dashCooldown;
+  }
+
+  tryPulse(){
+    if (this.prog.ranks.lightTheWorld < 1 || this.cds.pulse > 0) return;
+    this.cds.pulse = PULSE_COOLDOWN;
+    this.lantern.firePulse();
+    const dmg = DPS_WIDE * this.prog.wideDamageMult * this.prog.pulseDamageMult;
+    const res = this.enemies.burst(this.player.pos, PULSE_RADIUS, dmg, 0.6);
+    this.kills += res.kills;
+    this.gainXp(res.xp);
+  }
+
+  tryFocusState(){
+    if (this.prog.ranks.focusState < 1 || this.cds.focusState > 0) return;
+    this.cds.focusState = FOCUS_STATE_COOLDOWN;
+    this.focusActiveT = this.prog.focusStateDuration;
+  }
+
+  // ------------------------------------------------------------
 
   damagePlayer(dmg){
     if (this.player.invuln > 0) return;
@@ -179,7 +289,7 @@ class Game {
 
   gameOver(survived){
     this.state = 'over';
-    const stats = `SURVIVED ${fmtTime(this.elapsed)}<br/>GHOULS BANISHED: ${this.kills}`;
+    const stats = `SURVIVED ${fmtTime(this.elapsed)}<br/>LEVEL ${this.prog.level}<br/>GHOULS BANISHED: ${this.kills}`;
     if (survived){
       this.ui.showEnd('DAWN BREAKS', 'The lantern gutters out &mdash; but the sun rises.<br/>You kept the light alive.', stats);
     } else {

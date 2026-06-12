@@ -1,3 +1,5 @@
+import { iconSvg, ULT_UNLOCK } from './skills.js';
+
 export function fmtTime(sec){
   sec = Math.max(0, Math.ceil(sec));
   const m = Math.floor(sec / 60);
@@ -10,6 +12,10 @@ const IDS = [
   'focusText', 'focusFill', 'hitFlash', 'startOverlay', 'startBtn',
   'endOverlay', 'endTitle', 'endSub', 'endStats', 'restartBtn',
   'settingsBtn', 'settingsPanel', 'volumeSlider',
+  'xpFill', 'xpText', 'levelText',
+  'skillsBtn', 'skillsOverlay', 'skillCols', 'skillLevel', 'skillPoints',
+  'levelUpBanner', 'skillsClose',
+  'abDash', 'abPulse', 'abFocus',
 ];
 
 export class UI {
@@ -28,6 +34,13 @@ export class UI {
         this.el.settingsPanel.classList.add('hidden');
       }
     });
+
+    this.onSkillsToggle = null;
+    this.onSkillsClose = null;
+    this.el.skillsBtn.addEventListener('click', e => { e.target.blur(); this.onSkillsToggle?.(); });
+    this.el.skillsClose.addEventListener('click', e => { e.target.blur(); this.onSkillsClose?.(); });
+    this.skillNodes = new Map(); // skillId -> { el, rankEl, path, skill }
+    this.pathReqEls = new Map(); // pathId -> invested-count element
   }
 
   bindStart(cb){ this.el.startBtn.addEventListener('click', cb, { once: true }); }
@@ -54,6 +67,14 @@ export class UI {
     this.el.timer.textContent = fmtTime(elapsed);
   }
 
+  setXP(prog){
+    this.el.levelText.textContent = `LVL ${prog.level}`;
+    this.el.xpFill.style.width = `${Math.min(100, prog.xp / prog.next * 100)}%`;
+    this.el.xpText.textContent = `${prog.xp}/${prog.next}`;
+    this.el.skillLevel.textContent = `${prog.level}`;
+    this.el.skillPoints.textContent = `${prog.points}`;
+  }
+
   hitFlash(){
     const f = this.el.hitFlash;
     f.classList.remove('hit');
@@ -66,6 +87,116 @@ export class UI {
     this.el.volumeSlider.addEventListener('input', () => {
       audio.volume = this.el.volumeSlider.value / 100;
     });
+  }
+
+  // ------------------------------------------------------------ skill tree
+
+  buildSkills(paths, onInvest){
+    for (const path of paths){
+      const col = document.createElement('div');
+      col.className = 'skill-col';
+      col.style.setProperty('--path-color', path.color);
+
+      const h = document.createElement('h3');
+      h.textContent = path.name;
+      h.style.color = path.color;
+      col.appendChild(h);
+
+      const req = document.createElement('div');
+      req.className = 'path-req';
+      col.appendChild(req);
+      this.pathReqEls.set(path.id, req);
+
+      path.skills.forEach((skill, i) => {
+        if (i > 0){
+          const link = document.createElement('div');
+          link.className = 'skill-link';
+          col.appendChild(link);
+        }
+        const node = document.createElement('div');
+        node.className = 'skill-node locked';
+        node.style.color = path.color;
+
+        const icon = document.createElement('div');
+        icon.className = 'skill-icon';
+        icon.innerHTML = iconSvg(skill.id);
+        node.appendChild(icon);
+
+        const rank = document.createElement('div');
+        rank.className = 'skill-rank';
+        rank.textContent = `0/${skill.max}`;
+        node.appendChild(rank);
+
+        const tip = document.createElement('div');
+        tip.className = 'skill-tip';
+        const hotkey = skill.key ? `<br/><span class="tip-key">[${skill.key}]</span>` : '';
+        const reqTxt = skill.ultimate ? `<br/><span class="tip-req">Requires ${ULT_UNLOCK} points in ${path.name}</span>` : '';
+        tip.innerHTML = `<b style="color:${path.color}">${skill.name}</b><br/>${skill.desc}${hotkey}${reqTxt}`;
+        node.appendChild(tip);
+
+        node.addEventListener('click', () => onInvest(path, skill));
+        col.appendChild(node);
+        this.skillNodes.set(skill.id, { el: node, rankEl: rank, path, skill });
+      });
+
+      this.el.skillCols.appendChild(col);
+    }
+  }
+
+  refreshSkills(prog, paths){
+    for (const path of paths){
+      const invested = prog.pathInvested(path);
+      this.pathReqEls.get(path.id).textContent = `INVESTED ${invested}/${ULT_UNLOCK}`;
+      for (const skill of path.skills){
+        const node = this.skillNodes.get(skill.id);
+        const rank = prog.ranks[skill.id];
+        const unlocked = prog.isUnlocked(path, skill);
+        node.el.classList.toggle('locked', !unlocked);
+        node.el.classList.toggle('can', prog.canRank(path, skill));
+        node.el.classList.toggle('ranked', rank > 0);
+        node.el.classList.toggle('maxed', rank >= skill.max);
+        node.rankEl.textContent = `${rank}/${skill.max}`;
+      }
+    }
+    this.el.skillPoints.textContent = `${prog.points}`;
+    this.el.skillLevel.textContent = `${prog.level}`;
+  }
+
+  showSkills(prog, paths, leveled){
+    this.refreshSkills(prog, paths);
+    this.el.levelUpBanner.classList.toggle('hidden', !leveled);
+    this.el.skillsOverlay.classList.remove('hidden');
+  }
+
+  hideSkills(){ this.el.skillsOverlay.classList.add('hidden'); }
+
+  // ------------------------------------------------------------ ability dock
+
+  initDock(paths){
+    const find = id => {
+      for (const p of paths) for (const s of p.skills) if (s.id === id) return p;
+    };
+    const slots = [
+      ['abDash', 'dash'],
+      ['abPulse', 'lightTheWorld'],
+      ['abFocus', 'focusState'],
+    ];
+    for (const [slot, skillId] of slots){
+      const el = this.el[slot];
+      el.querySelector('.ab-icon').innerHTML = iconSvg(skillId);
+      el.querySelector('.ab-icon').style.color = find(skillId).color;
+    }
+  }
+
+  setAbility(slot, { rank, cd, cdMax, active }){
+    const el = this.el[slot];
+    el.classList.toggle('locked', rank < 1);
+    el.classList.toggle('active', active > 0);
+    const onCd = rank >= 1 && cd > 0.05;
+    el.querySelector('.ab-cd').style.height = onCd ? `${cd / cdMax * 100}%` : '0%';
+    const txt = el.querySelector('.ab-cdtxt');
+    if (active > 0) txt.textContent = `${Math.ceil(active)}`;
+    else txt.textContent = onCd ? `${Math.ceil(cd)}` : '';
   }
 
   showEnd(title, sub, stats){

@@ -1,17 +1,18 @@
-// Ghoul spawning, AI, and the difficulty ramp.
+// Enemy spawning, AI, and the difficulty ramp.
 //
-// Ramp (t = minutes elapsed, fully ramped at 8:00):
-//   spawn interval  3.5s -> 0.8s
-//   pack size       1    -> up to 4
-//   max alive       8    -> 45
-//   ghoul HP        18   -> ~35
-//   ghoul speed     2.4  -> 4.8 (always slower than the player's 6.5)
+// Ramp (m = minutes elapsed, fully ramped at 8:00):
+//   GHOUL  — spawn interval 3s -> 0.5s, pack 1 -> 4, max alive 16 -> 90,
+//            HP 18 -> ~35, speed 2.4 -> 4.8, hits for 8
+//   HOUND  — faster but frailer; first one at ~1:00, spawn interval
+//            9s -> 3.5s, pack 1 -> 3, max alive 2 -> 18, HP 12 -> ~23,
+//            speed 4.2 -> 6.0 (still under the player's 6.5), hits for 5
+// Both award the same XP per kill.
 import * as THREE from 'three';
-import { createGhoul } from './assets.js';
+import { createGhoul, createGhoulHound } from './assets.js';
+import { xpForKill } from './skills.js';
 
-const TOUCH_DAMAGE = 8;
-const ATTACK_COOLDOWN = 0.9;
 const STUN_TIME = 0.28;
+const HOUND_FIRST_SPAWN = 60; // seconds before the first hound shows up
 
 export class EnemyManager {
   constructor(scene, world){
@@ -19,30 +20,66 @@ export class EnemyManager {
     this.world = world;
     this.list = [];
     this.spawnTimer = 2.5;
+    this.houndTimer = HOUND_FIRST_SPAWN;
   }
 
   difficulty(elapsed){
     const m = elapsed / 60;
     const t = Math.min(1, m / 8);
     return {
-      interval: 3.5 + (0.8 - 3.5) * t,
-      maxAlive: Math.min(45, Math.floor(8 + m * 4)),
-      groupSize: 1 + Math.min(3, Math.floor(m / 2)),
-      hp: 18 * (1 + 0.12 * m),
-      speed: Math.min(4.8, 2.4 + 0.18 * m),
+      xp: xpForKill(m),
+      ghoul: {
+        interval: 3 + (0.5 - 3) * t,
+        maxAlive: Math.min(90, Math.floor(16 + m * 4)),
+        groupSize: 1 + Math.min(3, Math.floor(m / 2)),
+        hp: 18 * (1 + 0.12 * m),
+        speed: Math.min(4.8, 2.4 + 0.18 * m),
+        dmg: 8,
+        atkCd: 0.9,
+        bobF: 4, bobA: 0.08,
+      },
+      hound: {
+        interval: 9 + (3.5 - 9) * t,
+        maxAlive: Math.min(18, Math.floor(2 + m * 2)),
+        groupSize: 1 + Math.min(2, Math.floor(m / 3)),
+        hp: 12 * (1 + 0.12 * m),
+        speed: Math.min(6.0, 4.2 + 0.2 * m),
+        dmg: 5,
+        atkCd: 0.7,
+        bobF: 9, bobA: 0.1, // gallop
+      },
     };
   }
 
   update(dt, elapsed, player, onPlayerHit){
     const diff = this.difficulty(elapsed);
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0 && this.list.length < diff.maxAlive){
-      this.spawnTimer = diff.interval * (0.75 + Math.random() * 0.5);
-      const n = 1 + Math.floor(Math.random() * diff.groupSize);
-      for (let i = 0; i < n && this.list.length < diff.maxAlive; i++) this.spawn(player.pos, diff);
+
+    let ghouls = 0, hounds = 0;
+    for (const g of this.list){
+      if (g.dying) continue;
+      if (g.type === 'hound') hounds++;
+      else ghouls++;
     }
 
-    // pairwise separation so packs don't collapse into one ghoul
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0 && ghouls < diff.ghoul.maxAlive){
+      this.spawnTimer = diff.ghoul.interval * (0.75 + Math.random() * 0.5);
+      const n = 1 + Math.floor(Math.random() * diff.ghoul.groupSize);
+      for (let i = 0; i < n && ghouls < diff.ghoul.maxAlive; i++, ghouls++){
+        this.spawn('ghoul', player.pos, diff.ghoul, diff.xp);
+      }
+    }
+
+    this.houndTimer -= dt;
+    if (this.houndTimer <= 0 && hounds < diff.hound.maxAlive){
+      this.houndTimer = diff.hound.interval * (0.75 + Math.random() * 0.5);
+      const n = 1 + Math.floor(Math.random() * diff.hound.groupSize);
+      for (let i = 0; i < n && hounds < diff.hound.maxAlive; i++, hounds++){
+        this.spawn('hound', player.pos, diff.hound, diff.xp);
+      }
+    }
+
+    // pairwise separation so packs don't collapse into one enemy
     for (const g of this.list) g.sep.set(0, 0);
     for (let i = 0; i < this.list.length; i++){
       const a = this.list[i];
@@ -95,19 +132,19 @@ export class EnemyManager {
       this.world.collideCircle(g.pos, g.r);
 
       if (dist < player.radius + g.r + 0.35 && g.atkCd === 0 && g.stun <= 0){
-        g.atkCd = ATTACK_COOLDOWN;
-        onPlayerHit(TOUCH_DAMAGE);
+        g.atkCd = g.atkCdMax;
+        onPlayerHit(g.dmg);
       }
 
-      g.group.position.set(g.pos.x, 0.06 + Math.sin(t * 4 + g.phase) * 0.08, g.pos.z);
+      g.group.position.set(g.pos.x, 0.06 + Math.sin(t * g.bobF + g.phase) * g.bobA, g.pos.z);
       g.group.rotation.y = Math.atan2(dx, dz);
       const f = Math.min(1, g.flash);
       for (const m of g.mats) m.emissive.setRGB(f, f, f * 0.85);
-      g.eyeMat.color.setHex(g.flash > 0.01 ? 0xffffff : 0x9fff9b);
+      g.eyeMat.color.setHex(g.flash > 0.01 ? 0xffffff : g.eyeColor);
     }
   }
 
-  spawn(playerPos, diff){
+  spawn(type, playerPos, stats, xp){
     for (let attempt = 0; attempt < 12; attempt++){
       const ang = Math.random() * Math.PI * 2;
       const dist = 13 + Math.random() * 9; // just past the wide light radius
@@ -115,14 +152,21 @@ export class EnemyManager {
       const z = playerPos.z + Math.sin(ang) * dist;
       if (!this.world.hasRoomAtPoint(x, z)) continue;
       if (this.world.pointBlocked(x, z, 0.8)) continue;
-      const { group, mats, eyeMat } = createGhoul();
+      const { group, mats, eyeMat } = type === 'hound' ? createGhoulHound() : createGhoul();
       group.position.set(x, 0, z);
       this.scene.add(group);
       this.list.push({
+        type,
         pos: new THREE.Vector3(x, 0, z),
-        r: 0.55,
-        hp: diff.hp,
-        speed: diff.speed * (0.85 + Math.random() * 0.3),
+        r: type === 'hound' ? 0.5 : 0.55,
+        hp: stats.hp,
+        xp,
+        speed: stats.speed * (0.85 + Math.random() * 0.3),
+        dmg: stats.dmg,
+        atkCdMax: stats.atkCd,
+        bobF: stats.bobF,
+        bobA: stats.bobA,
+        eyeColor: type === 'hound' ? 0xff9a5e : 0x9fff9b,
         stun: 0,
         flash: 0,
         atkCd: 0.4,
@@ -137,9 +181,9 @@ export class EnemyManager {
     }
   }
 
-  // Apply one lantern damage tick to every ghoul inside the light sector.
+  // Apply one lantern damage tick to every enemy inside the light sector.
   applyLightTick(origin, aimDir, tick){
-    let hits = 0, kills = 0;
+    let hits = 0, kills = 0, xp = 0;
     const full = tick.halfArc >= Math.PI - 0.01;
     for (const g of this.list){
       if (g.dying) continue;
@@ -163,9 +207,33 @@ export class EnemyManager {
         g.dying = true;
         g.deathT = 0;
         kills++;
+        xp += g.xp;
       }
     }
-    return { hits, kills };
+    return { hits, kills, xp };
+  }
+
+  // Light the World: damage every enemy within radius, regardless of arc.
+  burst(origin, radius, dmg, stunTime){
+    let hits = 0, kills = 0, xp = 0;
+    for (const g of this.list){
+      if (g.dying) continue;
+      const dx = g.pos.x - origin.x, dz = g.pos.z - origin.z;
+      const d = Math.hypot(dx, dz);
+      if (d - g.r > radius) continue;
+      hits++;
+      g.hp -= dmg;
+      g.stun = Math.max(g.stun, stunTime);
+      g.flash = 1;
+      if (d > 0.001) g.kb.set(dx / d * 4, dz / d * 4);
+      if (g.hp <= 0){
+        g.dying = true;
+        g.deathT = 0;
+        kills++;
+        xp += g.xp;
+      }
+    }
+    return { hits, kills, xp };
   }
 
   remove(i){

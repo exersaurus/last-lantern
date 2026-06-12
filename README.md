@@ -22,8 +22,22 @@ Then open http://localhost:5173 in a browser.
 | --- | --- |
 | WASD / arrows | Move (screen-relative) |
 | Mouse | Aim the lantern |
-| Hold left click | Focus the light from a 360° circle down to a 45° beam |
+| Hold left click | Focus the light from a 360° circle down to a 45° beam (movement slowed 50% while held) |
+| C | Open/close the skill tree (pauses the game) |
+| Space | In a Flash — dash toward the cursor (Physique ultimate) |
+| E | Light the World — screen-wide pulse (Aura ultimate) |
+| R | Focus State — boosted beam for a few seconds (Focus ultimate) |
 | `[` / `]` | Decrease / increase pixelation |
+
+## Progression
+
+Kills award XP (8 base, +1.6 per elapsed minute); each level grants one
+skill point, targeted at level ~30-40 by 10:00. Leveling auto-opens the
+skill tree (game pauses); points can be saved for later. Three linear
+paths — Aura (wide light), Physique (player), Focus (beam) — each with two
+10-rank passives and an ultimate that unlocks after 10 points in the path's
+passives. XP curve and all skill numbers live in
+[src/skills.js](src/skills.js).
 
 Wide light: weak damage over a large area. Narrow beam: high damage, fast
 ticks, longer reach. Enemies hit by a damage tick flash and are briefly
@@ -54,8 +68,12 @@ Core balance constants live at the top of these files:
 - `src/lantern.js` — the light weapon: point light (wide) + spotlight
   (focused) + a custom ground-sector shader showing the exact damage zone,
   which pulses on every damage tick.
-- `src/enemies.js` — ghoul spawner, chase AI with separation, stun/flash on
-  damage ticks, difficulty ramp.
+- `src/enemies.js` — enemy spawners (ghouls + faster, frailer ghoul hounds
+  on their own spawn track), chase AI with separation, stun/flash on damage
+  ticks, per-type difficulty ramps.
 - `src/assets.js` — all procedural low-poly assets: lightkeeper, ghoul,
   pines, rocks, grass tufts, glowing mushrooms.
-- `src/player.js`, `src/ui.js` — movement/red damage flash, DOM HUD.
+- `src/skills.js` — XP curve, skill tree definition, pixel-art skill icons
+  (generated as SVG), and the `Progression` class with derived modifiers.
+- `src/player.js`, `src/ui.js` — movement/dash/red damage flash; DOM HUD,
+  ability dock, and skill tree menu.

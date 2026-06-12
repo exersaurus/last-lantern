@@ -81,6 +81,63 @@
     width:14px; height:18px; background:linear-gradient(#ffd36b,#d98a1f);
     border:2px solid #000; cursor:pointer; border-radius:0;
   }
+
+  /* XP bar */
+  #xpFill { background:linear-gradient(#9fe07a,#4f8f3a); }
+
+  /* Ability dock */
+  #abilityDock { position:fixed; bottom:30px; left:16px; z-index:5; display:flex; gap:12px; pointer-events:none; }
+  .ability { position:relative; width:46px; height:46px; background:#15131a; border:2px solid #000; outline:2px solid #3a3548; }
+  .ability .ab-icon { position:absolute; inset:5px; }
+  .ability .ab-icon svg { width:100%; height:100%; }
+  .ability.locked { opacity:0.3; }
+  .ability.locked .ab-icon { filter:grayscale(1); }
+  .ability .ab-cd { position:absolute; left:0; right:0; bottom:0; height:0%; background:rgba(0,0,0,0.75); }
+  .ability .ab-cdtxt { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:#fff; text-shadow:2px 2px 0 #000; }
+  .ability .ab-key { position:absolute; bottom:-16px; width:100%; text-align:center; font-size:7px; color:#8d8672; text-shadow:1px 1px 0 #000; }
+  .ability.active { outline-color:#7fc8ff; animation:abactive 0.5s steps(2) infinite; }
+  .ability.active .ab-cdtxt { color:#bfe2ff; }
+  @keyframes abactive { 50% { outline-color:#fff; } }
+
+  /* Skills button */
+  #skillsBtn {
+    position:fixed; bottom:22px; right:60px; z-index:15; pointer-events:auto;
+    font-family:inherit; font-size:16px; width:36px; height:36px; padding:0;
+    cursor:pointer; background:#15131a; color:#9fe07a;
+    border:2px solid #000; outline:2px solid #3a3548;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  #skillsBtn:hover { background:#2a2436; outline-color:#9fe07a; }
+  #skillsBtn.attention { animation:abactive 0.6s steps(2) infinite; outline-color:#9fe07a; }
+
+  /* Skill tree overlay */
+  #skillsOverlay { gap:16px; background:rgba(2,3,8,0.88); }
+  #levelUpBanner { font-size:16px; color:#9fe07a; text-shadow:3px 3px 0 #000, 0 0 18px rgba(120,220,90,0.4); }
+  .skills-head { font-size:10px; color:#ffd98a; }
+  #skillCols { display:flex; gap:26px; align-items:flex-start; }
+  .skill-col { width:200px; background:#0f0c16; border:2px solid #000; outline:2px solid #3a3548;
+    padding:16px 12px 20px; display:flex; flex-direction:column; align-items:center; }
+  .skill-col h3 { font-size:10px; margin-bottom:6px; text-shadow:2px 2px 0 #000; }
+  .skill-col .path-req { font-size:7px; color:#8d8672; margin-bottom:10px; }
+  .skill-link { width:4px; height:18px; background:#3a3548; }
+  .skill-node { position:relative; width:58px; height:58px; background:#1a1722;
+    border:2px solid #000; outline:2px solid #3a3548; cursor:pointer; pointer-events:auto; }
+  .skill-node .skill-icon { position:absolute; inset:7px; }
+  .skill-node svg { width:100%; height:100%; }
+  .skill-node.locked { filter:grayscale(1); opacity:0.4; cursor:not-allowed; }
+  .skill-node.ranked { background:#241f31; }
+  .skill-node.can { outline-color:var(--path-color, #ffd36b); animation:canpulse 0.7s steps(2) infinite; }
+  .skill-node.maxed { outline-color:#b78cff; }
+  @keyframes canpulse { 50% { outline-color:#fff3c0; } }
+  .skill-rank { position:absolute; bottom:2px; right:3px; font-size:7px; color:#fff; text-shadow:1px 1px 0 #000; }
+  .skill-tip { display:none; position:absolute; left:50%; transform:translateX(-50%); top:62px; width:210px;
+    background:#000; border:2px solid #3a3548; padding:9px; font-size:7px; line-height:13px;
+    color:#cfc6ab; z-index:30; text-align:center; pointer-events:none; }
+  .skill-tip .tip-key { color:#ffd98a; }
+  .skill-tip .tip-req { color:#e84d4d; }
+  .skill-node:hover .skill-tip { display:block; }
+  #skillsHint { font-size:8px; color:#8d8672; line-height:14px; }
 </style>
 <script type="importmap">
 {
@@ -101,6 +158,10 @@
       <div class="bar-row" id="fuelRow">
         <div class="bar-label">FUEL</div>
         <div class="bar"><div class="fill" id="fuelFill" style="width:100%"></div><div class="txt" id="fuelText">10:00</div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label" id="levelText">LVL 1</div>
+        <div class="bar"><div class="fill" id="xpFill" style="width:0%"></div><div class="txt" id="xpText">0/19</div></div>
       </div>
     </div>
     <div class="stats">
@@ -123,6 +184,7 @@
     <div class="controls">
       <b>WASD</b> &mdash; move &nbsp;&nbsp; <b>MOUSE</b> &mdash; aim<br/>
       <b>HOLD LEFT CLICK</b> &mdash; focus the lantern into a searing beam<br/>
+      <b>C</b> &mdash; skill tree &nbsp;&nbsp; <b>SPACE / E / R</b> &mdash; skills, once learned<br/>
       Wide light is gentle. A narrow beam burns.
     </div>
     <button id="startBtn">LIGHT THE LANTERN</button>
@@ -135,6 +197,27 @@
     <button id="restartBtn">RELIGHT</button>
   </div>
 
+  <div id="abilityDock">
+    <div class="ability locked" id="abDash">
+      <div class="ab-icon"></div><div class="ab-cd"></div><div class="ab-cdtxt"></div><div class="ab-key">SPACE</div>
+    </div>
+    <div class="ability locked" id="abPulse">
+      <div class="ab-icon"></div><div class="ab-cd"></div><div class="ab-cdtxt"></div><div class="ab-key">E</div>
+    </div>
+    <div class="ability locked" id="abFocus">
+      <div class="ab-icon"></div><div class="ab-cd"></div><div class="ab-cdtxt"></div><div class="ab-key">R</div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="skillsOverlay">
+    <div id="levelUpBanner" class="hidden">LEVEL UP!</div>
+    <div class="skills-head">LEVEL <span id="skillLevel">1</span> &nbsp;&bull;&nbsp; POINTS <span id="skillPoints">0</span></div>
+    <div id="skillCols"></div>
+    <div id="skillsHint">Click a glowing skill to invest a point. Ultimates unlock after 10 points in their path.<br/>The night waits while you decide.</div>
+    <button id="skillsClose">SAVE FOR LATER (C)</button>
+  </div>
+
+  <button id="skillsBtn" title="Skills (C)">&#10022;</button>
   <button id="settingsBtn" title="Settings">⚙</button>
   <div id="settingsPanel" class="hidden">
     <div class="settings-title">SETTINGS</div>

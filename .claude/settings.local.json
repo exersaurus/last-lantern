@@ -16,7 +16,7 @@
       "PowerShell(Move-Item \"tools\\\\serve.js\" \"tools\\\\serve.mjs\" -Force)",
       "PowerShell(node tools/serve.mjs 5173)",
       "PowerShell(Start-Sleep -Seconds 2; foreach \\($p in @\\(\"/\", \"/src/main.js\", \"/src/world.js\", \"/src/lantern.js\", \"/src/enemies.js\", \"/src/assets.js\", \"/src/player.js\", \"/src/ui.js\"\\)\\) { $r = Invoke-WebRequest -Uri \"http://localhost:5173$p\" -UseBasicParsing; \"$p -> $\\($r.StatusCode\\) \\($\\($r.RawContentLength\\) bytes\\)\" })",
-      "PowerShell(node \"c:\\\\Users\\\\TinyTrex\\\\Dropbox\\\\App Projects\\\\last-lantern\\\\tools\\\\serve.mjs\")"
+      "PowerShell(foreach \\($f in @\\(\"src\\\\assets.js\", \"src\\\\enemies.js\"\\)\\) { $out = Get-Content $f -Raw | node --input-type=module --check - 2>&1; if \\($LASTEXITCODE -eq 0\\) { \"${f}: OK\" } else { \"${f}: FAIL\"; $out } })"
     ]
   }
 }
