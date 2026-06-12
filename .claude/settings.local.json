@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(if \\($?\\) { \"SYNTAX OK\" })",
+      "PowerShell(npx -y serve -l 5173 .)",
+      "PowerShell(\"\")",
+      "PowerShell(\"--- server ---\")",
+      "PowerShell(Start-Sleep -Seconds 15; \"--- esbuild ---\"; Get-Content \"C:\\\\Users\\\\benson\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-benson-Dropbox-App-Projects-last-lantern\\\\028a31c1-b566-491d-b0c6-98eb322bc33b\\\\tasks\\\\ba2l9gk27.output\" -ErrorAction SilentlyContinue; \"--- server ---\"; Get-Content \"C:\\\\Users\\\\benson\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-benson-Dropbox-App-Projects-last-lantern\\\\028a31c1-b566-491d-b0c6-98eb322bc33b\\\\tasks\\\\bpg0ri7a8.output\" -ErrorAction SilentlyContinue; \"--- port ---\"; \\(Test-NetConnection -ComputerName localhost -Port 5173 -WarningAction SilentlyContinue\\).TcpTestSucceeded)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(npx -y esbuild --version)",
+      "PowerShell(\"--- esbuild ---\")",
+      "PowerShell(\"--- serve ---\")",
+      "PowerShell(node tools/serve.js 5173)",
+      "PowerShell(Start-Sleep -Seconds 2; \\(Invoke-WebRequest -Uri \"http://localhost:5173/\" -UseBasicParsing\\).StatusCode; \\(Invoke-WebRequest -Uri \"http://localhost:5173/src/main.js\" -UseBasicParsing\\).StatusCode; try { \\(Invoke-WebRequest -Uri \"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js\" -UseBasicParsing -Method Head -TimeoutSec 15\\).StatusCode } catch { \"CDN check failed: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(Move-Item \"tools\\\\serve.js\" \"tools\\\\serve.mjs\" -Force)",
+      "PowerShell(node tools/serve.mjs 5173)",
+      "PowerShell(Start-Sleep -Seconds 2; foreach \\($p in @\\(\"/\", \"/src/main.js\", \"/src/world.js\", \"/src/lantern.js\", \"/src/enemies.js\", \"/src/assets.js\", \"/src/player.js\", \"/src/ui.js\"\\)\\) { $r = Invoke-WebRequest -Uri \"http://localhost:5173$p\" -UseBasicParsing; \"$p -> $\\($r.StatusCode\\) \\($\\($r.RawContentLength\\) bytes\\)\" })",
+      "PowerShell(node \"c:\\\\Users\\\\TinyTrex\\\\Dropbox\\\\App Projects\\\\last-lantern\\\\tools\\\\serve.mjs\")"
+    ]
+  }
+}

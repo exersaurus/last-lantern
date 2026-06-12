@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Last Lantern</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; }
+  body { font-family:'Press Start 2P', monospace; color:#e8e0c8; cursor:crosshair; user-select:none; }
+  canvas { display:block; image-rendering:pixelated; }
+
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:5; }
+  .bars { position:absolute; top:16px; left:16px; display:flex; flex-direction:column; gap:10px; }
+  .bar-row { display:flex; align-items:center; gap:8px; }
+  .bar-label { font-size:8px; width:44px; color:#bdb49a; text-shadow:2px 2px 0 #000; }
+  .bar { width:220px; height:14px; background:#15131a; border:2px solid #000; outline:2px solid #3a3548; position:relative; }
+  .bar .fill { position:absolute; top:0; left:0; bottom:0; }
+  #hpFill { background:linear-gradient(#e84d4d,#a32626); }
+  #fuelFill { background:linear-gradient(#ffd36b,#d98a1f); }
+  .bar .txt { position:absolute; width:100%; text-align:center; font-size:8px; line-height:14px; color:#fff; text-shadow:1px 1px 0 #000; }
+  #fuelRow.low .bar { animation:lowpulse 0.8s steps(2) infinite; }
+  @keyframes lowpulse { 0% { outline-color:#3a3548; } 50% { outline-color:#e84d4d; } }
+
+  .stats { position:absolute; top:16px; right:16px; text-align:right; font-size:10px; line-height:20px; text-shadow:2px 2px 0 #000; }
+  .stats .dim { color:#8d8672; font-size:8px; }
+
+  #focusWrap { position:absolute; bottom:22px; left:50%; transform:translateX(-50%); text-align:center; }
+  #focusText { font-size:9px; margin-bottom:6px; color:#ffd98a; text-shadow:2px 2px 0 #000; }
+  #focusBar { width:240px; height:8px; background:#15131a; border:2px solid #000; outline:2px solid #3a3548; }
+  #focusFill { height:100%; width:0%; background:linear-gradient(90deg,#6b5a2a,#ffd36b,#fff3c0); }
+
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:4;
+    background:radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0.92) 100%); }
+  #hitFlash { position:fixed; inset:0; pointer-events:none; z-index:6; opacity:0;
+    background:radial-gradient(ellipse at center, transparent 30%, rgba(190,20,20,0.55) 100%); }
+  #hitFlash.hit { animation:hitfade 0.4s steps(4) forwards; }
+  @keyframes hitfade { 0% { opacity:1; } 100% { opacity:0; } }
+
+  .overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(2,3,8,0.82); text-align:center; gap:22px; }
+  .overlay h1 { font-size:34px; color:#ffd36b; text-shadow:4px 4px 0 #000, 0 0 24px rgba(255,180,80,0.35); letter-spacing:2px; }
+  .overlay .sub { font-size:10px; color:#9a917c; line-height:18px; }
+  .overlay .controls { font-size:9px; color:#cfc6ab; line-height:22px; }
+  .overlay .controls b { color:#ffd98a; }
+  .overlay button { pointer-events:auto; font-family:inherit; font-size:12px; padding:14px 22px; cursor:pointer;
+    background:#2a2436; color:#ffd98a; border:2px solid #000; outline:2px solid #5a4d2a; }
+  .overlay button:hover { background:#3a3148; outline-color:#ffd36b; }
+  .hidden { display:none !important; }
+  #endStats { font-size:10px; color:#cfc6ab; line-height:20px; }
+
+  /* Settings */
+  #settingsBtn {
+    position:fixed; bottom:22px; right:16px; z-index:15; pointer-events:auto;
+    font-family:inherit; font-size:16px; width:36px; height:36px; padding:0;
+    cursor:pointer; background:#15131a; color:#ffd98a;
+    border:2px solid #000; outline:2px solid #3a3548;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  #settingsBtn:hover { background:#2a2436; outline-color:#ffd36b; }
+  #settingsPanel {
+    position:fixed; bottom:66px; right:16px; z-index:15; width:210px;
+    background:#0f0c16; border:2px solid #000; outline:2px solid #3a3548;
+    padding:14px 16px; pointer-events:auto;
+  }
+  .settings-title { font-size:9px; color:#ffd98a; margin-bottom:12px; text-shadow:2px 2px 0 #000; }
+  .settings-row { display:flex; align-items:center; gap:10px; }
+  .settings-label { font-size:8px; color:#bdb49a; text-shadow:2px 2px 0 #000; white-space:nowrap; }
+  input[type=range].vol-slider {
+    -webkit-appearance:none; appearance:none; flex:1; height:10px;
+    background:#15131a; border:2px solid #000; outline:2px solid #3a3548; cursor:pointer;
+  }
+  input[type=range].vol-slider::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:18px;
+    background:linear-gradient(#ffd36b,#d98a1f); border:2px solid #000; cursor:pointer;
+  }
+  input[type=range].vol-slider::-moz-range-thumb {
+    width:14px; height:18px; background:linear-gradient(#ffd36b,#d98a1f);
+    border:2px solid #000; cursor:pointer; border-radius:0;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="hud">
+    <div class="bars">
+      <div class="bar-row">
+        <div class="bar-label">HP</div>
+        <div class="bar"><div class="fill" id="hpFill" style="width:100%"></div><div class="txt" id="hpText">100/100</div></div>
+      </div>
+      <div class="bar-row" id="fuelRow">
+        <div class="bar-label">FUEL</div>
+        <div class="bar"><div class="fill" id="fuelFill" style="width:100%"></div><div class="txt" id="fuelText">10:00</div></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div id="timer">00:00</div>
+      <div class="dim">SURVIVED</div>
+      <div id="kills" style="margin-top:8px">0</div>
+      <div class="dim">GHOULS BANISHED</div>
+    </div>
+    <div id="focusWrap">
+      <div id="focusText">LIGHT 360&deg;</div>
+      <div id="focusBar"><div id="focusFill"></div></div>
+    </div>
+  </div>
+  <div id="vignette"></div>
+  <div id="hitFlash"></div>
+
+  <div class="overlay" id="startOverlay">
+    <h1>LAST LANTERN</h1>
+    <div class="sub">The forest is endless. The night is not.<br/>Keep the flame alive until dawn.</div>
+    <div class="controls">
+      <b>WASD</b> &mdash; move &nbsp;&nbsp; <b>MOUSE</b> &mdash; aim<br/>
+      <b>HOLD LEFT CLICK</b> &mdash; focus the lantern into a searing beam<br/>
+      Wide light is gentle. A narrow beam burns.
+    </div>
+    <button id="startBtn">LIGHT THE LANTERN</button>
+  </div>
+
+  <div class="overlay hidden" id="endOverlay">
+    <h1 id="endTitle">DARKNESS</h1>
+    <div class="sub" id="endSub"></div>
+    <div id="endStats"></div>
+    <button id="restartBtn">RELIGHT</button>
+  </div>
+
+  <button id="settingsBtn" title="Settings">⚙</button>
+  <div id="settingsPanel" class="hidden">
+    <div class="settings-title">SETTINGS</div>
+    <div class="settings-row">
+      <span class="settings-label">MUSIC</span>
+      <input type="range" id="volumeSlider" class="vol-slider" min="0" max="100" value="50">
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
