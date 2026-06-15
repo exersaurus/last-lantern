@@ -16,6 +16,7 @@ const IDS = [
   'skillsBtn', 'skillsOverlay', 'skillCols', 'skillLevel', 'skillPoints',
   'levelUpBanner', 'skillsClose',
   'abDash', 'abPulse', 'abFocus',
+  'bossBars', 'bossBanner',
 ];
 
 export class UI {
@@ -197,6 +198,48 @@ export class UI {
     const txt = el.querySelector('.ab-cdtxt');
     if (active > 0) txt.textContent = `${Math.ceil(active)}`;
     else txt.textContent = onCd ? `${Math.ceil(cd)}` : '';
+  }
+
+  // ------------------------------------------------------------ bosses
+
+  announce(text, color = '#ff6b6b'){
+    const el = this.el.bossBanner;
+    el.textContent = text;
+    el.style.color = color;
+    el.classList.remove('show');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('show');
+  }
+
+  updateBosses(list){
+    const key = list.map(b => b.id).join(',');
+    if (key !== this._bossKey){
+      this._bossKey = key;
+      this.el.bossBars.innerHTML = '';
+      this._bossEls = new Map();
+      for (const b of list){
+        const row = document.createElement('div');
+        row.className = 'boss-row';
+        const name = document.createElement('div');
+        name.className = 'boss-name';
+        name.textContent = b.name;
+        name.style.color = b.color;
+        const bar = document.createElement('div');
+        bar.className = 'boss-bar';
+        const fill = document.createElement('div');
+        fill.className = 'boss-fill';
+        fill.style.background = b.color;
+        bar.appendChild(fill);
+        row.appendChild(name);
+        row.appendChild(bar);
+        this.el.bossBars.appendChild(row);
+        this._bossEls.set(b.id, fill);
+      }
+    }
+    for (const b of list){
+      const fill = this._bossEls.get(b.id);
+      if (fill) fill.style.width = `${Math.max(0, b.hp / b.maxHp * 100)}%`;
+    }
   }
 
   showEnd(title, sub, stats){

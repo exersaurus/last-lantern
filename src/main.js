@@ -47,6 +47,7 @@ class Game {
     this.player = new Player(this.scene);
     this.lantern = new Lantern(this.scene);
     this.enemies = new EnemyManager(this.scene, this.world);
+    this.enemies.onBoss = (name, color) => this.ui.announce(name + ' EMERGES', color);
 
     this.composer = new EffectComposer(this.renderer);
     this.pixelSize = 3;
@@ -166,8 +167,11 @@ class Game {
               - (this.keys.has('KeyA') || this.keys.has('ArrowLeft') ? 1 : 0);
       if (f || r) this.moveVec.addScaledVector(this.fwd, f).addScaledVector(this.right, r).normalize();
     }
-    // focusing the beam halves movement speed; Move Speed ranks soften the tax
-    p.speedMult = this.prog.moveSpeedMult * (playing && this.mouseDown ? 0.35 : 1);
+    // focusing the beam slows movement; overlord traps slow it further;
+    // Move Speed ranks soften both taxes
+    p.speedMult = this.prog.moveSpeedMult
+      * (playing && this.mouseDown ? 0.35 : 1)
+      * this.enemies.playerSlowFactor;
     p.update(dt, this.moveVec, this.aimDir, this.world);
 
     // room streaming: entering a new room spawns its neighbors, prunes the rest
@@ -199,6 +203,7 @@ class Game {
       this.elapsed += dt;
       this.fuel -= dt;
       this.enemies.update(dt, this.elapsed, p, dmg => this.damagePlayer(dmg));
+      this.ui.updateBosses(this.enemies.getBosses());
       this.ui.setHP(this.hp, this.maxHp);
       this.ui.setFuel(this.fuel, FUEL_SECONDS);
       this.ui.setFocus(this.lantern.arcDeg, this.lantern.focus);

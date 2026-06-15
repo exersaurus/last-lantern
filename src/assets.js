@@ -243,6 +243,65 @@ export function createGhoulSpitter(){
   return { group, mats: [bodyMat, headMat, armMat], eyeMat };
 }
 
+// --------------------------------------------------------- ghoul overlord
+// A larger, regal ghoul (boss). Built at roughly normal ghoul height so the
+// caller can scale the whole group up. Wields a glowing staff; eyes, staff
+// orb, and crown gems share `eyeMat` so they all flash white on damage.
+
+export function createGhoulOverlord(){
+  const group = new THREE.Group();
+  const robeMat = new THREE.MeshStandardMaterial({ color: 0x3a2b5e, roughness: 0.95, flatShading: true });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x5a3f8c, roughness: 0.9, flatShading: true });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x7e8c75, roughness: 0.9, flatShading: true });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xd9b24a, roughness: 0.4, metalness: 0.5, flatShading: true });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4df0 });
+
+  const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.95, 1.7, 7), robeMat);
+  robe.position.y = 0.85;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 0.55, 7), trimMat);
+  torso.position.y = 1.75;
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), headMat);
+  head.position.set(0, 2.2, 0.05);
+
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), eyeMat);
+  eyeL.position.set(-0.14, 2.26, 0.3);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), eyeMat);
+  eyeR.position.set(0.14, 2.26, 0.3);
+
+  // spiked crown of gold with a glowing gem at each point
+  const crown = new THREE.Group();
+  crown.position.set(0, 2.5, 0.05);
+  for (let i = 0; i < 6; i++){
+    const a = (i / 6) * Math.PI * 2;
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.24, 4), goldMat);
+    spike.position.set(Math.cos(a) * 0.3, 0.06, Math.sin(a) * 0.3);
+    crown.add(spike);
+    const gem = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 4), eyeMat);
+    gem.position.set(Math.cos(a) * 0.3, 0.2, Math.sin(a) * 0.3);
+    crown.add(gem);
+  }
+
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.75, 0.14), robeMat);
+  arm.position.set(0.5, 1.5, 0.25);
+  arm.rotation.x = -0.5;
+
+  // staff in the right hand
+  const staff = new THREE.Group();
+  staff.position.set(0.78, 0, 0.4);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.7, 6),
+    new THREE.MeshStandardMaterial({ color: 0x2a2233, roughness: 0.8, flatShading: true }));
+  pole.position.y = 1.35;
+  const claw = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.04, 6, 10), goldMat);
+  claw.position.y = 2.6;
+  claw.rotation.x = Math.PI / 2;
+  const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), eyeMat);
+  orb.position.y = 2.7;
+  staff.add(pole, claw, orb);
+
+  group.add(robe, torso, head, eyeL, eyeR, crown, arm, staff);
+  return { group, mats: [robeMat, trimMat, headMat, goldMat], eyeMat };
+}
+
 // ----------------------------------------------------------- lightkeeper
 
 export function createLightkeeper(){

@@ -71,7 +71,25 @@ Core balance constants live at the top of these files:
 - `src/enemies.js` — enemy spawners on independent tracks (ghouls; faster,
   frailer ghoul hounds from 1:00; tanky ranged ghoul spitters from 2:00
   whose projectiles ignore obstacles), chase AI with separation, stun/flash
-  on damage ticks, per-type difficulty ramps.
+  on damage ticks, per-type difficulty ramps, plus the boss system
+  (scheduled spawns, special moves, unlit overlord traps). Boss tuning lives
+  in `BOSS_HP_MULT`, `BOSS_SCHEDULE`, and `BOSS_DEFS` at the top.
+
+## Bosses
+
+One boss spawns every 2 minutes from 3:00 (banner + per-boss HP bar). All
+bosses are giant, stun- and knockback-immune, and award a big XP bounty;
+their HP is `BOSS_HP_MULT` (default 5) × the ghoul's ramped HP × a per-boss
+scale.
+
+- **3:00 Giant Ghoul** — 3.5× size, heavy melee bruiser.
+- **5:00 Giant Ghoul Hound** — glows red and winds up ~2s before charging in
+  a locked straight line for big damage, then is briefly vulnerable.
+- **7:00 Giant Ghoul Spitter** — alternates a 3-round straight burst and a
+  5-pellet shotgun arc.
+- **9:00 Ghoul Overlord** — regal staff-wielder that summons 5 unlit "ghoul
+  flesh" traps every 15s; standing in one halves your speed for its 10s life.
+  Traps don't glow, so you must sweep the lantern to spot them.
 - `src/assets.js` — all procedural low-poly assets: lightkeeper, ghoul,
   pines, rocks, grass tufts, glowing mushrooms.
 - `src/skills.js` — XP curve, skill tree definition, pixel-art skill icons
